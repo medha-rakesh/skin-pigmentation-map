@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Why Does Skin Color Vary? — UV & Human Pigmentation</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b1a2e;
+    --surface: #112240;
+    --border: rgba(255,255,255,0.1);
+    --text: #e8ddd0;
+    --muted: rgba(232,221,208,0.55);
+    --accent: #c8855a;
+    --popup-bg: #1a2f4a;
+    --popup-border: rgba(200,133,90,0.35);
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header {
+    padding: 2.5rem 2rem 1.5rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(26px, 4vw, 42px);
+    font-weight: 400;
+    line-height: 1.15;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 620px;
+  }
+
+  .caveat {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(200,133,90,0.08);
+    border: 0.5px solid rgba(200,133,90,0.25);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 1.2rem 2rem;
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .caveat-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--accent);
+  }
+
+  .caveat p {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .map-section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 1.5rem 2rem;
+  }
+
+  #map-wrap {
+    position: relative;
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #091628;
+  }
+
+  #map-wrap svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .country {
+    cursor: pointer;
+    transition: opacity 0.15s;
+    stroke-width: 0.4px;
+  }
+
+  .country:hover { opacity: 0.78; }
+
+  .graticule {
+    fill: none;
+    stroke: rgba(255,255,255,0.04);
+    stroke-width: 0.4px;
+  }
+
+  .sphere { fill: #091628; }
+
+  .equator-line {
+    fill: none;
+    stroke: rgba(255,255,255,0.4);
+    stroke-width: 1px;
+    stroke-dasharray: 5,4;
+  }
+
+  /* POPUP — solid background, works offline */
+  #popup {
+    display: none;
+    position: absolute;
+    background: #1a2f4a;
+    border: 1px solid rgba(200,133,90,0.4);
+    border-radius: 10px;
+    padding: 14px 16px;
+    width: 228px;
+    pointer-events: none;
+    z-index: 50;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  #popup.show { display: block; }
+
+  .p-zone {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .p-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 15px;
+    color: #e8ddd0;
+    margin-bottom: 7px;
+    line-height: 1.3;
+  }
+
+  .p-body {
+    font-size: 12px;
+    color: rgba(232,221,208,0.7);
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+
+  .p-skin-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 9px;
+    border-top: 0.5px solid rgba(255,255,255,0.12);
+  }
+
+  .p-swatches { display: flex; gap: 4px; }
+
+  .p-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .p-skin-label {
+    font-size: 11px;
+    color: rgba(232,221,208,0.6);
+  }
+
+  /* Legend */
+  .legend-wrap {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .legend-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 0.5px solid rgba(255,255,255,0.1);
+  }
+
+  .legend-labels {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .legend-labels span {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .hint {
+    font-size: 11px;
+    color: rgba(232,221,208,0.3);
+    text-align: center;
+    margin-top: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  /* Skin tone side strip */
+  .skin-strip {
+    display: flex;
+    flex-direction: column;
+    margin-top: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 0.5px solid rgba(255,255,255,0.1);
+    width: 100%;
+    height: 12px;
+    flex-direction: row;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 11px;
+    color: rgba(232,221,208,0.25);
+    letter-spacing: 0.03em;
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Human Biological Variation · IB 35AC</div>
+  <h1>Why does skin color vary?<br>It's all about UV.</h1>
+  <p class="subtitle">Human skin pigmentation is an evolutionary adaptation to UV radiation, not a marker of race. Click any country to explore the science behind the geographic gradient.</p>
+</header>
+
+<div class="caveat">
+  <span class="caveat-icon">&#9432;</span>
+  <p>Colors show UV intensity by latitude, which shaped <em>ancestral</em> skin pigmentation over thousands of years of evolution. Modern countries are highly diverse due to migration and do not reflect a single skin tone.</p>
+</div>
+
+<div class="map-section">
+  <div id="map-wrap">
+    <svg id="map" viewBox="0 0 900 480"></svg>
+    <div id="popup">
+      <div class="p-zone" id="p-zone"></div>
+      <div class="p-title" id="p-title"></div>
+      <div class="p-body" id="p-body"></div>
+      <div class="p-skin-row">
+        <div class="p-swatches" id="p-swatches"></div>
+        <div class="p-skin-label" id="p-skin-label"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend-wrap">
+    <div class="legend-bar">
+      <div style="flex:1;background:#7a1e00"></div>
+      <div style="flex:1;background:#8a3010"></div>
+      <div style="flex:1;background:#9a4820"></div>
+      <div style="flex:1;background:#7a5838"></div>
+      <div style="flex:1;background:#3a5870"></div>
+      <div style="flex:1;background:#2a4868"></div>
+      <div style="flex:1;background:#1a3858"></div>
+      <div style="flex:1;background:#0f2848"></div>
+    </div>
+    <div class="legend-labels">
+      <span>Equator — intense UV · darker ancestral pigmentation</span>
+      <span>Poles — minimal UV · lighter ancestral pigmentation</span>
+    </div>
+  </div>
+
+  <div class="skin-strip">
+    <div style="flex:1;background:#3a1808"></div>
+    <div style="flex:1;background:#5a2810"></div>
+    <div style="flex:1;background:#8a4820"></div>
+    <div style="flex:1;background:#b06838"></div>
+    <div style="flex:1;background:#c88050"></div>
+    <div style="flex:1;background:#daa878"></div>
+    <div style="flex:1;background:#e8c49a"></div>
+    <div style="flex:1;background:#f0d8b8"></div>
+  </div>
+  <div class="legend-labels" style="margin-top:3px">
+    <span style="font-size:11px;color:rgba(232,221,208,0.4)">Equatorial skin tones</span>
+    <span style="font-size:11px;color:rgba(232,221,208,0.4)">Polar skin tones</span>
+  </div>
+
+  <p class="hint">Based on Jablonski & Chaplin (2000, 2010) · Click any country to learn more</p>
+</div>
+
+<footer>
+  Sources: Jablonski & Chaplin (2000, 2010) · Lucock et al. (2022, 2023) · Jones et al. (2018)<br>
+  Created for IB 35AC — Human Biological Variation, UC Berkeley
+</footer>
+
+<script>
+const W = 900, H = 480;
+
+const zones = [
+  { range:[75,90],   color:"#0f2848", zone:"Polar (75–90°N/S)", title:"Near-zero UV — polar", body:"Virtually no UV reaches these latitudes year-round. Ancestral populations developed very light skin to extract every bit of Vitamin D from scarce sunlight.", swatches:["#f0d8b8","#e8c8a8"], label:"Very light ancestral tones" },
+  { range:[60,75],   color:"#1a3858", zone:"Sub-polar (60–75°)", title:"Very low UV — sub-polar", body:"Long dark winters mean very little UVB reaches the surface. Lighter skin evolved to allow enough UV through for Vitamin D synthesis, critical for bone health and immune function.", swatches:["#e8c49a","#daa878"], label:"Light ancestral tones" },
+  { range:[35,60],   color:"#2a4868", zone:"Temperate (35–60°)", title:"Moderate UV — temperate zones", body:"UV drops significantly at these latitudes. Lighter skin tones predominate ancestrally, allowing Vitamin D production during long winters with limited sunlight. Includes most of Europe and northern Asia.", swatches:["#daa878","#c88050"], label:"Light to medium-light tones" },
+  { range:[15,35],   color:"#7a5838", zone:"Subtropical (15–35°)", title:"Moderate to high UV — subtropics", body:"UV is strong especially in summer. Medium skin tones balance folate protection and Vitamin D synthesis. Includes South Asia, the Middle East, and North Africa.", swatches:["#c88050","#b06838","#8a4820"], label:"Medium to medium-dark tones" },
+  { range:[-15,15],  color:"#7a1e00", zone:"Equatorial (0–15°)", title:"Intense UV — equatorial zone", body:"UV is extremely strong year-round. Darker skin (more melanin) evolved to protect folate — a B vitamin critical for fetal development — from being broken down by UV rays. This is the folate-protection side of the Vitamin D/Folate hypothesis.", swatches:["#3a1808","#4a2010","#5a2810"], label:"Dark to very dark ancestral tones" },
+  { range:[-35,-15], color:"#7a5838", zone:"Subtropical South (15–35°S)", title:"Moderate to high UV — southern subtropics", body:"Mirrors the northern subtropics. Medium skin tones balance folate protection and Vitamin D synthesis. Includes southern Africa, much of South America, and parts of Australia.", swatches:["#c88050","#b06838","#8a4820"], label:"Medium to medium-dark tones" },
+  { range:[-60,-35], color:"#2a4868", zone:"Temperate South (35–60°S)", title:"Moderate UV — southern temperate", body:"UV is lower here. Lighter ancestral skin tones reflect reduced UV pressure. Includes southern South America and southern Australia.", swatches:["#daa878","#c88050"], label:"Light to medium-light tones" },
+  { range:[-75,-60], color:"#1a3858", zone:"Sub-polar South (60–75°S)", title:"Very low UV — southern sub-polar", body:"Very little UV reaches these latitudes. Largely uninhabited historically. Consistent with the pattern of lighter pigmentation at extreme latitudes.", swatches:["#e8c49a","#daa878"], label:"Light ancestral tones" },
+  { range:[-90,-75], color:"#0f2848", zone:"Polar South (75–90°S)", title:"Near-zero UV — Antarctica", body:"The lowest UV on Earth. Antarctica has never been permanently inhabited. The trend toward lighter skin at extreme latitudes reaches its endpoint here.", swatches:["#f0d8b8","#e8c8a8"], label:"Very light ancestral tones" },
+];
+
+function getZoneForLat(lat) {
+  return zones.find(z => lat >= z.range[0] && lat < z.range[1]) || zones[4];
+}
+
+function uvFill(lat) {
+  const z = getZoneForLat(lat);
+  return z ? z.color : "#0f2848";
+}
+
+const svg = d3.select("#map");
+const proj = d3.geoNaturalEarth1().scale(148).translate([W/2, H/2]);
+const pathGen = d3.geoPath().projection(proj);
+
+svg.append("path").datum({type:"Sphere"}).attr("class","sphere").attr("d", pathGen);
+svg.append("path").datum(d3.geoGraticule()()).attr("class","graticule").attr("d", pathGen);
+
+const popup = document.getElementById("popup");
+const mapWrap = document.getElementById("map-wrap");
+
+function showPopup(z, event) {
+  document.getElementById("p-zone").textContent = z.zone;
+  document.getElementById("p-title").textContent = z.title;
+  document.getElementById("p-body").textContent = z.body;
+  document.getElementById("p-skin-label").textContent = z.label;
+  const sw = document.getElementById("p-swatches");
+  sw.innerHTML = "";
+  z.swatches.forEach(c => {
+    const el = document.createElement("div");
+    el.className = "p-swatch";
+    el.style.background = c;
+    sw.appendChild(el);
+  });
+
+  const wRect = mapWrap.getBoundingClientRect();
+  const mouseX = event.clientX - wRect.left;
+  const mouseY = event.clientY - wRect.top;
+
+  const PW = 232, PH = 210;
+  let left = mouseX - PW / 2;
+  let top;
+
+  if (mouseY + PH + 16 > wRect.height || mouseY > wRect.height * 0.55) {
+    top = mouseY - PH - 12;
+  } else {
+    top = mouseY + 14;
+  }
+
+  if (left < 6) left = 6;
+  if (left + PW > wRect.width - 6) left = wRect.width - PW - 6;
+  if (top < 6) top = 6;
+
+  popup.style.left = left + "px";
+  popup.style.top = top + "px";
+  popup.classList.add("show");
+}
+
+fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+  .then(r => r.json())
+  .then(world => {
+    const countries = topojson.feature(world, world.objects.countries);
+    svg.selectAll(".country")
+      .data(countries.features)
+      .enter().append("path")
+      .attr("class","country")
+      .attr("d", pathGen)
+      .attr("fill", d => {
+        const [, lat] = d3.geoCentroid(d);
+        return uvFill(lat);
+      })
+      .attr("stroke", "rgba(255,255,255,0.12)")
+      .on("click", function(event, d) {
+        event.stopPropagation();
+        const [, lat] = d3.geoCentroid(d);
+        const z = getZoneForLat(lat);
+        showPopup(z, event);
+      });
+
+    svg.append("path")
+      .attr("class","equator-line")
+      .attr("d", pathGen({type:"LineString", coordinates:[[-180,0],[180,0]]}));
+
+    const [, eqY] = proj([0,0]);
+    svg.append("text")
+      .attr("x", W - 8).attr("y", eqY - 5)
+      .attr("text-anchor","end")
+      .attr("fill","rgba(255,255,255,0.45)")
+      .attr("font-size","11")
+      .attr("font-family","DM Sans, sans-serif")
+      .text("equator");
+  })
+  .catch(() => {
+    svg.append("text")
+      .attr("x", W/2).attr("y", H/2)
+      .attr("text-anchor","middle")
+      .attr("fill","rgba(255,255,255,0.4)")
+      .attr("font-size","14")
+      .text("Open this file in a browser with internet access to load the map.");
+  });
+
+document.addEventListener("click", () => popup.classList.remove("show"));
+</script>
+</body>
+</html>
